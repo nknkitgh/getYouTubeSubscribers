@@ -1,5 +1,6 @@
-// URL、チャンネル登録数、チャンネル名、チャンネルアイコン(URL)、動画本数、概要を取得
+// URL、チャンネル名、チャンネルアイコン、概要、チャンネル登録数、動画本数を取得
 // URLから正しいチャンネルが取得できていないものがあった
+// アイコンが取得できない
 
 const SPREADSHEET_ID = '1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w';
 const SHEET_NAME = 'Sheet1';
@@ -12,33 +13,51 @@ function getYouTubeChannelDetails() {
   const channelDetails = [];
 
   for (const [url] of urls) {
-    if (url) {
-      const channelId = extractChannelId(url);
-      Logger.log('Channel ID: ' + channelId);
-      if (channelId) {
-        const channelInfo = getChannelInfo(channelId);
-        Logger.log('Channel Info: ' + JSON.stringify(channelInfo));
-        if (channelInfo) {
-          channelDetails.push([
-            channelInfo.subscribers,
-            channelInfo.channelName,
-            channelInfo.channelIcon,
-            channelInfo.videoCount,
-            channelInfo.description
-          ]);
+    try {
+      if (url) {
+        const channelId = extractChannelId(url);
+        Logger.log('Channel ID: ' + channelId);
+        if (channelId) {
+          const channelInfo = getChannelInfo(channelId);
+          Logger.log('Channel Info: ' + JSON.stringify(channelInfo));
+          if (channelInfo) {
+            const iconUrl = saveChannelIcon(channelInfo.channelIcon);
+            channelDetails.push([
+              url, // URL
+              channelInfo.channelName, // チャンネル名
+              iconUrl, // チャンネルアイコン
+              channelInfo.description, // 概要
+              channelInfo.subscribers, // 登録者数
+              channelInfo.videoCount // 動画本数
+            ]);
+          } else {
+            channelDetails.push([url, 'チャンネル情報が見つかりません', '', '', '', '']);
+          }
         } else {
-          channelDetails.push(['チャンネル情報が見つかりません', '', '', '', '']);
+          channelDetails.push([url, 'チャンネルIDが無効です', '', '', '', '']);
         }
       } else {
-        channelDetails.push(['チャンネルIDが無効です', '', '', '', '']);
+        channelDetails.push(['URLが無効です', '', '', '', '', '']);
       }
-    } else {
-      channelDetails.push(['URLが無効です', '', '', '', '']);
+    } catch (e) {
+      Logger.log('Error processing URL ' + url + ': ' + e.message);
+      channelDetails.push([url, 'エラーが発生しました', '', '', '', '']);
     }
   }
 
-  const resultRange = sheet.getRange(2, 2, channelDetails.length, 5);
+  const resultRange = sheet.getRange(2, 1, channelDetails.length, 6);
   resultRange.setValues(channelDetails);
+
+  // 画像をスプレッドシートに挿入する
+  for (let i = 0; i < channelDetails.length; i++) {
+    const iconUrl = channelDetails[i][2];
+    if (iconUrl) {
+      const cell = sheet.getRange(2 + i, 3); // 画像を挿入するセルの位置を指定（ここではC列）
+      const image = UrlFetchApp.fetch(iconUrl).getBlob();
+      cell.setValue('');
+      cell.insertImage(image, 1, 1);
+    }
+  }
 }
 
 function extractChannelId(url) {
@@ -78,4 +97,15 @@ function getChannelInfo(channelId) {
     };
   }
   return null;
+}
+
+function saveChannelIcon(iconUrl) {
+  try {
+    const iconBlob = UrlFetchApp.fetch(iconUrl).getBlob();
+    const iconFile = DriveApp.createFile(iconBlob);
+    return iconFile.getUrl();
+  } catch (e) {
+    Logger.log('Error saving channel icon: ' + e.message);
+    return '';
+  }
 }
