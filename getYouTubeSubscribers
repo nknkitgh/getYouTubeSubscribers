@@ -1,0 +1,63 @@
+const SPREADSHEET_ID = '1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w';
+const SHEET_NAME = 'Sheet1';
+const API_KEY = 'AIzaSyApRuGgWYCWiKJ-gwK1BVXFltmnbWlL5DI';
+
+function getYouTubeSubscribers() {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+  const range = sheet.getRange('A2:A' + sheet.getLastRow());
+  const urls = range.getValues();
+  const subscriberCounts = [];
+
+  for (const [url] of urls) {
+    if (url) {
+      const accountName = extractAccountName(url);
+      Logger.log('Account Name: ' + accountName);
+      if (accountName) {
+        const channelId = getChannelId(accountName);
+        Logger.log('Channel ID: ' + channelId);
+        if (channelId) {
+          const subscribers = getSubscribers(channelId);
+          Logger.log('Subscribers: ' + subscribers);
+          subscriberCounts.push([subscribers]);
+        } else {
+          subscriberCounts.push(['チャンネルIDが見つかりません']);
+        }
+      } else {
+        subscriberCounts.push(['アカウント名が無効です']);
+      }
+    } else {
+      subscriberCounts.push(['URLが無効です']);
+    }
+  }
+
+  const resultRange = sheet.getRange(2, 2, subscriberCounts.length, 1);
+  resultRange.setValues(subscriberCounts);
+}
+
+function extractAccountName(url) {
+  const regex = /https:\/\/www\.youtube\.com\/@([a-zA-Z0-9_-]+)/;
+  const match = url.match(regex);
+  return match ? match[1] : null;
+}
+
+function getChannelId(accountName) {
+  const options = {
+    method: 'GET',
+    muteHttpExceptions: true
+  };
+  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
+  Logger.log('getChannelId Response: ' + response.getContentText());
+  const data = JSON.parse(response.getContentText());
+  return data.items && data.items.length > 0 ? data.items[0].id.channelId : null;
+}
+
+function getSubscribers(channelId) {
+  const options = {
+    method: 'GET',
+    muteHttpExceptions: true
+  };
+  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelId}&key=${API_KEY}`, options);
+  Logger.log('getSubscribers Response: ' + response.getContentText());
+  const data = JSON.parse(response.getContentText());
+  return data.items && data.items.length > 0 ? data.items[0].statistics.subscriberCount : 'データなし';
+}
