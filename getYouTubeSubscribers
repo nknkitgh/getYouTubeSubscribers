@@ -1,39 +1,44 @@
-// URLから正しいチャンネルが取得できていない様子
+// URL、チャンネル登録数、チャンネル名、チャンネルアイコン(URL)、動画本数、概要を取得
+// URLから正しいチャンネルが取得できていないものがあった
 
 const SPREADSHEET_ID = '1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w';
 const SHEET_NAME = 'Sheet1';
 const API_KEY = 'AIzaSyApRuGgWYCWiKJ-gwK1BVXFltmnbWlL5DI';
 
-function getYouTubeSubscribers() {
+function getYouTubeChannelDetails() {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
   const range = sheet.getRange('A2:A' + sheet.getLastRow());
   const urls = range.getValues();
-  const subscriberCounts = [];
+  const channelDetails = [];
 
   for (const [url] of urls) {
     if (url) {
       const accountName = extractAccountName(url);
       Logger.log('Account Name: ' + accountName);
       if (accountName) {
-        const channelId = getChannelId(accountName);
-        Logger.log('Channel ID: ' + channelId);
-        if (channelId) {
-          const subscribers = getSubscribers(channelId);
-          Logger.log('Subscribers: ' + subscribers);
-          subscriberCounts.push([subscribers]);
+        const channelInfo = getChannelInfo(accountName);
+        Logger.log('Channel Info: ' + JSON.stringify(channelInfo));
+        if (channelInfo) {
+          channelDetails.push([
+            channelInfo.subscribers,
+            channelInfo.channelName,
+            channelInfo.channelIcon,
+            channelInfo.videoCount,
+            channelInfo.description
+          ]);
         } else {
-          subscriberCounts.push(['チャンネルIDが見つかりません']);
+          channelDetails.push(['チャンネルIDが見つかりません', '', '', '', '']);
         }
       } else {
-        subscriberCounts.push(['アカウント名が無効です']);
+        channelDetails.push(['アカウント名が無効です', '', '', '', '']);
       }
     } else {
-      subscriberCounts.push(['URLが無効です']);
+      channelDetails.push(['URLが無効です', '', '', '', '']);
     }
   }
 
-  const resultRange = sheet.getRange(2, 2, subscriberCounts.length, 1);
-  resultRange.setValues(subscriberCounts);
+  const resultRange = sheet.getRange(2, 2, channelDetails.length, 5);
+  resultRange.setValues(channelDetails);
 }
 
 function extractAccountName(url) {
@@ -42,24 +47,31 @@ function extractAccountName(url) {
   return match ? match[1] : null;
 }
 
-function getChannelId(accountName) {
+function getChannelInfo(accountName) {
   const options = {
     method: 'GET',
     muteHttpExceptions: true
   };
-  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
-  Logger.log('getChannelId Response: ' + response.getContentText());
-  const data = JSON.parse(response.getContentText());
-  return data.items && data.items.length > 0 ? data.items[0].id.channelId : null;
-}
-
-function getSubscribers(channelId) {
-  const options = {
-    method: 'GET',
-    muteHttpExceptions: true
-  };
-  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${channelId}&key=${API_KEY}`, options);
-  Logger.log('getSubscribers Response: ' + response.getContentText());
-  const data = JSON.parse(response.getContentText());
-  return data.items && data.items.length > 0 ? data.items[0].statistics.subscriberCount : 'データなし';
+  const searchResponse = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
+  Logger.log('getChannelInfo Response: ' + searchResponse.getContentText());
+  const searchData = JSON.parse(searchResponse.getContentText());
+  
+  if (searchData.items && searchData.items.length > 0) {
+    const channelId = searchData.items[0].id.channelId;
+    const channelResponse = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${API_KEY}`, options);
+    Logger.log('Channel Data Response: ' + channelResponse.getContentText());
+    const channelData = JSON.parse(channelResponse.getContentText());
+    
+    if (channelData.items && channelData.items.length > 0) {
+      const channel = channelData.items[0];
+      return {
+        subscribers: channel.statistics.subscriberCount,
+        channelName: channel.snippet.title,
+        channelIcon: channel.snippet.thumbnails.default.url,
+        videoCount: channel.statistics.videoCount,
+        description: channel.snippet.description
+      };
+    }
+  }
+  return null;
 }
