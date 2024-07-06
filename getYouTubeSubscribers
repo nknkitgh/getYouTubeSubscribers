@@ -13,10 +13,10 @@ function getYouTubeChannelDetails() {
 
   for (const [url] of urls) {
     if (url) {
-      const accountName = extractAccountName(url);
-      Logger.log('Account Name: ' + accountName);
-      if (accountName) {
-        const channelInfo = getChannelInfo(accountName);
+      const channelId = extractChannelId(url);
+      Logger.log('Channel ID: ' + channelId);
+      if (channelId) {
+        const channelInfo = getChannelInfo(channelId);
         Logger.log('Channel Info: ' + JSON.stringify(channelInfo));
         if (channelInfo) {
           channelDetails.push([
@@ -27,10 +27,10 @@ function getYouTubeChannelDetails() {
             channelInfo.description
           ]);
         } else {
-          channelDetails.push(['チャンネルIDが見つかりません', '', '', '', '']);
+          channelDetails.push(['チャンネル情報が見つかりません', '', '', '', '']);
         }
       } else {
-        channelDetails.push(['アカウント名が無効です', '', '', '', '']);
+        channelDetails.push(['チャンネルIDが無効です', '', '', '', '']);
       }
     } else {
       channelDetails.push(['URLが無効です', '', '', '', '']);
@@ -41,37 +41,41 @@ function getYouTubeChannelDetails() {
   resultRange.setValues(channelDetails);
 }
 
-function extractAccountName(url) {
+function extractChannelId(url) {
   const regex = /https:\/\/www\.youtube\.com\/@([a-zA-Z0-9_-]+)/;
   const match = url.match(regex);
-  return match ? match[1] : null;
+  if (match) {
+    const accountName = match[1];
+    const options = {
+      method: 'GET',
+      muteHttpExceptions: true
+    };
+    const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
+    Logger.log('Extract Channel ID Response: ' + response.getContentText());
+    const data = JSON.parse(response.getContentText());
+    return data.items && data.items.length > 0 ? data.items[0].id.channelId : null;
+  }
+  return null;
 }
 
-function getChannelInfo(accountName) {
+function getChannelInfo(channelId) {
   const options = {
     method: 'GET',
     muteHttpExceptions: true
   };
-  const searchResponse = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
-  Logger.log('getChannelInfo Response: ' + searchResponse.getContentText());
-  const searchData = JSON.parse(searchResponse.getContentText());
+  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${API_KEY}`, options);
+  Logger.log('getChannelInfo Response: ' + response.getContentText());
+  const data = JSON.parse(response.getContentText());
   
-  if (searchData.items && searchData.items.length > 0) {
-    const channelId = searchData.items[0].id.channelId;
-    const channelResponse = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${API_KEY}`, options);
-    Logger.log('Channel Data Response: ' + channelResponse.getContentText());
-    const channelData = JSON.parse(channelResponse.getContentText());
-    
-    if (channelData.items && channelData.items.length > 0) {
-      const channel = channelData.items[0];
-      return {
-        subscribers: channel.statistics.subscriberCount,
-        channelName: channel.snippet.title,
-        channelIcon: channel.snippet.thumbnails.default.url,
-        videoCount: channel.statistics.videoCount,
-        description: channel.snippet.description
-      };
-    }
+  if (data.items && data.items.length > 0) {
+    const channel = data.items[0];
+    return {
+      subscribers: channel.statistics.subscriberCount,
+      channelName: channel.snippet.title,
+      channelIcon: channel.snippet.thumbnails.default.url,
+      videoCount: channel.statistics.videoCount,
+      description: channel.snippet.description
+    };
   }
   return null;
 }
