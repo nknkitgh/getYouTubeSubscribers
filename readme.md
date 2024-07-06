@@ -1,0 +1,1 @@
+GASとyoutubeapiを利用してyoutubeチャンネルの登録数を自動取得する
