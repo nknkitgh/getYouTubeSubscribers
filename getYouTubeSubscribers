@@ -1,45 +1,47 @@
-function getYouTubeChannelInfo() {
-  // スプレッドシートとシートの取得
-  var sheet = SpreadsheetApp.openById('1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w').getActiveSheet();
-  var data = sheet.getRange('A2:A' + sheet.getLastRow()).getValues();
-  
-  // YouTube Data APIのURL
-  var apiKey = 'YOUR_API_KEY';
-  var apiBaseUrl = 'https://www.googleapis.com/youtube/v3/';
-  
-  // 取得したデータを元に各チャンネルの情報を取得
-  data.forEach(function(row, index) {
-    var url = row[0];
-    if (url) {
-      var username = url.split('@')[1];
-      
-      // チャンネルIDの取得
-      var searchUrl = apiBaseUrl + 'search?part=snippet&type=channel&q=' + username + '&key=' + apiKey;
-      var response = UrlFetchApp.fetch(searchUrl);
-      var searchResults = JSON.parse(response.getContentText());
-      
-      if (searchResults.items && searchResults.items.length > 0) {
-        var channel = searchResults.items[0];
-        var channelId = channel.id.channelId;
-        
-        // チャンネル情報の取得
-        var channelUrl = apiBaseUrl + 'channels?part=snippet,statistics&id=' + channelId + '&key=' + apiKey;
-        var channelResponse = UrlFetchApp.fetch(channelUrl);
-        var channelInfo = JSON.parse(channelResponse.getContentText());
-        
-        if (channelInfo.items && channelInfo.items.length > 0) {
-          var channelDetails = channelInfo.items[0];
-          var snippet = channelDetails.snippet;
-          var statistics = channelDetails.statistics;
-          
-          // スプレッドシートにデータを書き込み
-          sheet.getRange(index + 2, 2).setValue(snippet.title); // チャンネル名
-          sheet.getRange(index + 2, 3).setValue(snippet.thumbnails.default.url); // チャンネルアイコン
-          sheet.getRange(index + 2, 4).setValue(snippet.description); // 概要
-          sheet.getRange(index + 2, 5).setValue(statistics.subscriberCount); // チャンネル登録数
-          sheet.getRange(index + 2, 6).setValue(statistics.videoCount); // 動画本数
-        }
+function getYoutubeChannelInfo() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const lastRow = sheet.getLastRow();
+
+  // 1列目からURLを取得し、ユーザー名を抽出
+  for (let i = 2; i <= lastRow; i++) {
+    const url = sheet.getRange(i, 1).getValue();
+    const username = url.split('@')[1];
+
+    // YouTube Data APIを使用してチャンネル情報を取得
+    const searchResponse = YouTube.Search.list('snippet', {
+      q: `"${username}"`,
+      type: 'channel',
+      maxResults: 1
+    });
+
+    if (searchResponse.items && searchResponse.items.length > 0) {
+      const channelId = searchResponse.items[0].snippet.channelId;
+
+      // チャンネル情報の詳細を取得
+      const channelResponse = YouTube.Channels.list('snippet,statistics', {
+        id: channelId,
+        maxResults: 1
+      });
+
+      if (channelResponse.items && channelResponse.items.length > 0) {
+        const channel = channelResponse.items[0];
+        const channelTitle = channel.snippet.title;
+        const channelIcon = channel.snippet.thumbnails.default.url;
+        const channelDescription = channel.snippet.description;
+        const subscriberCount = channel.statistics.subscriberCount;
+        const videoCount = channel.statistics.videoCount;
+
+        // スプレッドシートに情報を登録
+        sheet.getRange(i, 2).setValue(channelTitle);
+        sheet.getRange(i, 3).setValue(channelIcon);
+        sheet.getRange(i, 4).setValue(channelDescription);
+        sheet.getRange(i, 5).setValue(subscriberCount);
+        sheet.getRange(i, 6).setValue(videoCount);
+      } else {
+        Logger.log(`チャンネル情報が見つかりませんでした: ${username}`);
       }
+    } else {
+      Logger.log(`チャンネルが見つかりませんでした: ${username}`);
     }
-  });
+  }
 }
