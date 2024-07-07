@@ -1,3 +1,4 @@
+// claudeを利用してコードを修正
 // URL、チャンネル名、チャンネルアイコン、概要、チャンネル登録数、動画本数を取得
 // URLから正しいチャンネルが取得できていないものがあった
 // アイコンが取得できない
@@ -61,15 +62,15 @@ function getYouTubeChannelDetails() {
 }
 
 function extractChannelId(url) {
-  const regex = /https:\/\/www\.youtube\.com\/@([a-zA-Z0-9_-]+)/;
+  const regex = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:channel\/|user\/|@)([a-zA-Z0-9_-]+)/;
   const match = url.match(regex);
   if (match) {
-    const accountName = match[1];
+    const identifier = match[1];
     const options = {
       method: 'GET',
       muteHttpExceptions: true
     };
-    const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${accountName}&key=${API_KEY}`, options);
+    const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${identifier}&key=${API_KEY}`, options);
     Logger.log('Extract Channel ID Response: ' + response.getContentText());
     const data = JSON.parse(response.getContentText());
     return data.items && data.items.length > 0 ? data.items[0].id.channelId : null;
@@ -102,7 +103,8 @@ function getChannelInfo(channelId) {
 function saveChannelIcon(iconUrl) {
   try {
     const iconBlob = UrlFetchApp.fetch(iconUrl).getBlob();
-    const iconFile = DriveApp.createFile(iconBlob);
+    const folder = DriveApp.createFolder('YouTubeChannelIcons');
+    const iconFile = folder.createFile(iconBlob);
     return iconFile.getUrl();
   } catch (e) {
     Logger.log('Error saving channel icon: ' + e.message);
