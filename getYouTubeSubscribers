@@ -1,113 +1,45 @@
-// claudeを利用してコードを修正
-// URL、チャンネル名、チャンネルアイコン、概要、チャンネル登録数、動画本数を取得
-// URLから正しいチャンネルが取得できていないものがあった
-// アイコンが取得できない
-
-const SPREADSHEET_ID = '1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w';
-const SHEET_NAME = 'Sheet1';
-const API_KEY = 'AIzaSyApRuGgWYCWiKJ-gwK1BVXFltmnbWlL5DI';
-
-function getYouTubeChannelDetails() {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-  const range = sheet.getRange('A2:A' + sheet.getLastRow());
-  const urls = range.getValues();
-  const channelDetails = [];
-
-  for (const [url] of urls) {
-    try {
-      if (url) {
-        const channelId = extractChannelId(url);
-        Logger.log('Channel ID: ' + channelId);
-        if (channelId) {
-          const channelInfo = getChannelInfo(channelId);
-          Logger.log('Channel Info: ' + JSON.stringify(channelInfo));
-          if (channelInfo) {
-            const iconUrl = saveChannelIcon(channelInfo.channelIcon);
-            channelDetails.push([
-              url, // URL
-              channelInfo.channelName, // チャンネル名
-              iconUrl, // チャンネルアイコン
-              channelInfo.description, // 概要
-              channelInfo.subscribers, // 登録者数
-              channelInfo.videoCount // 動画本数
-            ]);
-          } else {
-            channelDetails.push([url, 'チャンネル情報が見つかりません', '', '', '', '']);
-          }
-        } else {
-          channelDetails.push([url, 'チャンネルIDが無効です', '', '', '', '']);
-        }
-      } else {
-        channelDetails.push(['URLが無効です', '', '', '', '', '']);
-      }
-    } catch (e) {
-      Logger.log('Error processing URL ' + url + ': ' + e.message);
-      channelDetails.push([url, 'エラーが発生しました', '', '', '', '']);
-    }
-  }
-
-  const resultRange = sheet.getRange(2, 1, channelDetails.length, 6);
-  resultRange.setValues(channelDetails);
-
-  // 画像をスプレッドシートに挿入する
-  for (let i = 0; i < channelDetails.length; i++) {
-    const iconUrl = channelDetails[i][2];
-    if (iconUrl) {
-      const cell = sheet.getRange(2 + i, 3); // 画像を挿入するセルの位置を指定（ここではC列）
-      const image = UrlFetchApp.fetch(iconUrl).getBlob();
-      cell.setValue('');
-      cell.insertImage(image, 1, 1);
-    }
-  }
-}
-
-function extractChannelId(url) {
-  const regex = /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:channel\/|user\/|@)([a-zA-Z0-9_-]+)/;
-  const match = url.match(regex);
-  if (match) {
-    const identifier = match[1];
-    const options = {
-      method: 'GET',
-      muteHttpExceptions: true
-    };
-    const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${identifier}&key=${API_KEY}`, options);
-    Logger.log('Extract Channel ID Response: ' + response.getContentText());
-    const data = JSON.parse(response.getContentText());
-    return data.items && data.items.length > 0 ? data.items[0].id.channelId : null;
-  }
-  return null;
-}
-
-function getChannelInfo(channelId) {
-  const options = {
-    method: 'GET',
-    muteHttpExceptions: true
-  };
-  const response = UrlFetchApp.fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${API_KEY}`, options);
-  Logger.log('getChannelInfo Response: ' + response.getContentText());
-  const data = JSON.parse(response.getContentText());
+function getYouTubeChannelInfo() {
+  // スプレッドシートとシートの取得
+  var sheet = SpreadsheetApp.openById('1x5pntmQB1cgonogxk-NTjC0mQDL0O_ezKD092RqlH_w').getActiveSheet();
+  var data = sheet.getRange('A2:A' + sheet.getLastRow()).getValues();
   
-  if (data.items && data.items.length > 0) {
-    const channel = data.items[0];
-    return {
-      subscribers: channel.statistics.subscriberCount,
-      channelName: channel.snippet.title,
-      channelIcon: channel.snippet.thumbnails.default.url,
-      videoCount: channel.statistics.videoCount,
-      description: channel.snippet.description
-    };
-  }
-  return null;
-}
-
-function saveChannelIcon(iconUrl) {
-  try {
-    const iconBlob = UrlFetchApp.fetch(iconUrl).getBlob();
-    const folder = DriveApp.createFolder('YouTubeChannelIcons');
-    const iconFile = folder.createFile(iconBlob);
-    return iconFile.getUrl();
-  } catch (e) {
-    Logger.log('Error saving channel icon: ' + e.message);
-    return '';
-  }
+  // YouTube Data APIのURL
+  var apiKey = 'YOUR_API_KEY';
+  var apiBaseUrl = 'https://www.googleapis.com/youtube/v3/';
+  
+  // 取得したデータを元に各チャンネルの情報を取得
+  data.forEach(function(row, index) {
+    var url = row[0];
+    if (url) {
+      var username = url.split('@')[1];
+      
+      // チャンネルIDの取得
+      var searchUrl = apiBaseUrl + 'search?part=snippet&type=channel&q=' + username + '&key=' + apiKey;
+      var response = UrlFetchApp.fetch(searchUrl);
+      var searchResults = JSON.parse(response.getContentText());
+      
+      if (searchResults.items && searchResults.items.length > 0) {
+        var channel = searchResults.items[0];
+        var channelId = channel.id.channelId;
+        
+        // チャンネル情報の取得
+        var channelUrl = apiBaseUrl + 'channels?part=snippet,statistics&id=' + channelId + '&key=' + apiKey;
+        var channelResponse = UrlFetchApp.fetch(channelUrl);
+        var channelInfo = JSON.parse(channelResponse.getContentText());
+        
+        if (channelInfo.items && channelInfo.items.length > 0) {
+          var channelDetails = channelInfo.items[0];
+          var snippet = channelDetails.snippet;
+          var statistics = channelDetails.statistics;
+          
+          // スプレッドシートにデータを書き込み
+          sheet.getRange(index + 2, 2).setValue(snippet.title); // チャンネル名
+          sheet.getRange(index + 2, 3).setValue(snippet.thumbnails.default.url); // チャンネルアイコン
+          sheet.getRange(index + 2, 4).setValue(snippet.description); // 概要
+          sheet.getRange(index + 2, 5).setValue(statistics.subscriberCount); // チャンネル登録数
+          sheet.getRange(index + 2, 6).setValue(statistics.videoCount); // 動画本数
+        }
+      }
+    }
+  });
 }
